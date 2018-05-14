@@ -1,0 +1,113 @@
+QMainWindow {
+    background: #060606;
+    color: #ddd;
+}
+
+QMenuBar {
+    background-color: transparent;
+    border-bottom: 1px solid white;
+}
+
+QMenuBar::item {
+    spacing: 3px; /* spacing between menu bar items */
+    padding: 1px 4px;
+    background: #ddd;
+    border-radius: 0px;
+}
+
+QMenuBar::item:selected { /* when selected using mouse or keyboard */
+    background: #fff;
+}
+
+QMenuBar::item:pressed {
+    background: #888888;
+}
+QPushButton {
+    background-color: #ddd;
+    border: none;
+    min-width: 68px;
+    min-height: 28px;
+}
+
+QSlider::groove:horizontal {
+    border: 0px solid transparent;
+    height: 2px;
+    background: #111111;
+    margin: 2px 0;
+}
+
+QSlider::sub-page:horizontal {
+    background: #bbb;
+}
+
+QSlider::handle:horizontal {
+    background-color: rgb(255, 255, 255);
+    height: 10px;
+    width: 12px;
+    border: 0px solid transparent;
+    margin: -2px 0;
+    border-radius: 1px;
+}
+
+QSlider::handle:horizontal:pressed {
+    background-color: rgb(255, 255, 255);
+    height: 10px;
+    width: 18px;
+    border: 0px solid transparent;
+    margin: -5px 0px;
+    border-radius: 1px;
+}
+
+QSlider::handle:horizontal:disabled {
+    background-color: #bbbbbb;
+    height: 2px;
+    width: 8px;
+    border: 1px solid transparent;
+    margin: -1px -1px;
+    border-radius: 10px;
+}
+
+QLineEdit {
+    color: #bbb;
+    background: transparent;
+    border: 1px solid #bbb;
+}
+
+QDateTimeEdit {
+    color: #bbb;
+    background: #000000;
+    border: 1px solid #bbb;
+}
+
+QListWidget {
+    color: #bbb;
+    background: #000000;
+    border: 1px solid #bbb;
+}
+
+QListWidget::item {
+    background-color: #111;
+    spacing: 9px;
+    border: 0px;
+    border-style: solid;
+    border-width: 1px;
+    border-color: white;
+}
+
+QListWidget::item:selected {
+    background-color: #bbb;
+}
+
+QLabel{
+    color: #ddd;
+}
+
+QMessageBox{
+    background-color: #060606
+}
+
+* {
+  font-family: Comfortaa;
+  font-size: 13px;
+  font-weight: Normal;
+}

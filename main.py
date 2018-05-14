@@ -27,4 +27,4 @@ if __name__ == "__main__":
     #получится 0, если человек не нарушает, 1 если нарушает
     results = list([model.predict(np.array([image.img_to_array(image.array_to_img(people).resize((128,128)))])) for people in peoples])
 
-    print(results)
+    print(list([np.argmax(out) for out in results]))
