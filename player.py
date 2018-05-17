@@ -1,8 +1,14 @@
-import sys
-import vlc
 import os
 import re
+import sys
+import vlc
+import mask_rcnn
+import numpy as np
 from db import db_api
+import tensorflow as tf
+from keras.models import load_model
+from keras.preprocessing import image
+
 from PyQt5 import QtGui, QtCore
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QWidget, QFrame,
                              QHBoxLayout, QPushButton, QSlider, QVBoxLayout,
@@ -21,113 +27,84 @@ class Path_Line_Edit(QLineEdit):
         else:
             super(Path_Line_Edit, self).keyPressEvent(event)
 
+class AnalyseWorker(QtCore.QRunnable):
+    """
+    init
+    """
 
-class Analyse(QMainWindow):
-    def __init__(self, master=None):
-        QMainWindow.__init__(self, master)
+    def __init__(self, file, master):
+        super(AnalyseWorker, self).__init__()
         self.master = master
+        self.file = file
 
-        self.setWindowTitle("Analyse")
+    @QtCore.pyqtSlot()
+    def run(self):
 
-        self.statuslabel = QLabel("Start...")
+        def replace(l, step = 5):
 
-        self.widget = QWidget(self)
-        self.setCentralWidget(self.widget)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.statuslabel)
-        self.widget.setLayout(layout)
-
-    def replace(self, l, step = 5):
-
-        for i in range(0, len(l), step):
-            if l[i:i+step].count(1) > l[i:i+step].count(0):
-                if i+step < len(l):
-                    for j in range(i, i+step): l[j] = 1
+            for i in range(0, len(l), step):
+                if l[i:i+step].count(1) > l[i:i+step].count(0):
+                    if i+step < len(l):
+                        for j in range(i, i+step): l[j] = 1
+                    else:
+                        for j in range(i, len(l)): l[j] = 1
                 else:
-                    for j in range(i, len(l)): l[j] = 1
-            else:
-                if i+step < len(l):
-                    for j in range(i, i+step): l[j] = 0
-                else:
-                    for j in range(i, len(l)): l[j] = 0
-        return l
+                    if i+step < len(l):
+                        for j in range(i, i+step): l[j] = 0
+                    else:
+                        for j in range(i, len(l)): l[j] = 0
+            return l
 
-    def find_time(self, l, end = 0):
-        try:
-            start = l[end:].index(1)
-            try:
-                end = l[end:].index(0)
-                return self.find_time(l, end)
-            except ValueError:
-                return start, len(l)
-        except ValueError:
-            return None
+        def find_time(l, end = 0):
 
-    def find_time(self, l, end = 0):
+            time = []
 
-        time = []
-
-        while True:
-            try:
-                start = end + l[end:].index(1)
-                print("start ", start)
+            while True:
                 try:
-                    end = start + l[start:].index(0)
-                    time.append((start, end))
-                    print("end ", end)
+                    start = end + l[end:].index(1)
+                    print("start ", start)
+                    try:
+                        end = start + l[start:].index(0)
+                        time.append((start, end))
+                        print("end ", end)
 
+                    except ValueError:
+                        time.append((start, len(l)))
+                        break
                 except ValueError:
-                    time.append((start, len(l)))
                     break
-            except ValueError:
-                break
 
-        return time
-
-    def start_analyse(self):
-
-        try:
-            file = self.master.fileslist.currentItem().text()
-        except AttributeError:
-            QMessageBox.information(self, "Warning!", "You should to select a file.")
-            self.close()
-            return
+            return time
 
         print("Starting...")
 
-        self.centerOnScreen()
-        self.show()
-
         print("Getting access to database...")
 
-        file_id = db_api.select_file(self.master.db, file)
+        db = db_api.create_connection(os.path.join(os.getcwd(), 'db','data.db'))
+
+        file_id = db_api.select_file(db, self.file)
         if file_id:
             print("File already in db, skiping...")
         else:
             print("Adding filename in database...")
-            with self.master.db:
-                file_id = db_api.add_file(self.master.db, file)
+            with db:
+                file_id = db_api.add_file(db, self.file)
 
         print("Extracting frames from video...")
-        import os
-        path_to_file = os.path.join(self.master.path, file)
+        path_to_file = os.path.join(self.master.path, self.file)
         print(path_to_file)
-        command  = r"ffmpeg -i {0} -vf fps=1 ./frames/%d.jpg".format(path_to_file)
+        command  = r"ffmpeg -i {0} -vf fps=1 ./frames/%d.jpg".format(re.escape(path_to_file))
         os.system(command)
 
         frames = os.listdir('./frames/')
         print("Starting analyse {0} frames".format(len(frames)))
 
-        import mask_rcnn
         rcnn_model = mask_rcnn.load_mask_rcnn()
         print("Successfully loaded 1st model...")
 
-        import numpy as np
-        from keras.models import load_model
-        from keras.preprocessing import image
-
         model = load_model("./model.h5")
+        model._make_predict_function()
+        graph = tf.get_default_graph()
 
         print("Successfully loaded 2nd model... Starting analyse")
 
@@ -137,10 +114,11 @@ class Analyse(QMainWindow):
 
         for framefile in frames:
 
-            print("Frame #{0}".format(framefile[:-4]))
+            print("Frame #{0}, {1} files until finish.".format(framefile[:-4], len(frames)-len(labels.keys())))
 
             peoples = mask_rcnn.select_people(rcnn_model, image.img_to_array(image.load_img("./frames/"+framefile)))
-            results = list([model.predict(np.array([image.img_to_array(image.array_to_img(people).resize((128,128)))])) for people in peoples])
+            with graph.as_default():
+                results = list([model.predict(np.array([image.img_to_array(image.array_to_img(people).resize((128,128)))])) for people in peoples])
             labels[int(framefile[:-4])] = list([np.argmax(out) for out in results])
 
         print("Stopping analyse")
@@ -150,19 +128,51 @@ class Analyse(QMainWindow):
 
         warning_points = [1 if 1 in labels[key] else 0 for key in sorted(labels.keys())]
 
-        warning_points = self.replace(warning_points)
+        warning_points = replace(warning_points)
 
         import datetime
 
-        times = self.find_time(warning_points)
+        times = find_time(warning_points)
 
-        with self.master.db:
+        with db:
             for time in times:
-                db_api.add_time(self.master.db, (str(datetime.timedelta(seconds=time[0])), str(datetime.timedelta(seconds=time[1])), file_id,))
+                db_api.add_time(db, (str(datetime.timedelta(seconds=time[0])), str(datetime.timedelta(seconds=time[1])), file_id,))
 
         os.system('rm frames/*.jpg')
 
-        #self.closeEvent()
+        self.master.stop_analyse()
+
+
+class Analyse(QMainWindow):
+    def __init__(self, master=None):
+        super(Analyse, self).__init__(master)
+
+        self.master = master
+
+        self.initUI()
+
+    def initUI(self):
+
+        self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
+
+        self.statuslabel = QLabel("Please wait...")
+
+        self.widget = QWidget(self)
+        self.setCentralWidget(self.widget)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.statuslabel)
+        self.widget.setLayout(layout)
+        self.centerOnScreen()
+
+    def on(self):
+
+        self.activateWindow()
+        self.show()
+
+    def off(self):
+
+        self.close()
 
     def centerOnScreen(self):
         '''
@@ -176,13 +186,15 @@ class Analyse(QMainWindow):
         self.master.setEnabled(True)
         event.accept()
 
+
+
 class Player(QMainWindow):
     """
     A simple Media Player using VLC and Qt
     """
     def __init__(self, master=None):
-        QMainWindow.__init__(self, master)
-        self.setWindowTitle("Media Player")
+        super().__init__()
+        self.setWindowTitle("CCTV by @XII")
 
         # creating a basic vlc instance
         self.instance = vlc.Instance()
@@ -213,7 +225,7 @@ class Player(QMainWindow):
         #time value
         self.timevalue = QDateTimeEdit()
         self.timevalue.setDisplayFormat('hh:mm:ss.z')
-        self.timevalue.dateTimeChanged.connect(lambda x: self.setTime(self.timevalue.time().msecsSinceStartOfDay()))
+        # self.timevalue.dateTimeChanged.connect(lambda x: self.setTime(self.timevalue.time().msecsSinceStartOfDay()))
 
         #position slider
         self.positionslider = QSlider(QtCore.Qt.Horizontal, self)
@@ -236,6 +248,8 @@ class Player(QMainWindow):
         self.analysebutton = QPushButton('Analyse')
         self.analysebutton.clicked.connect(self.start_analyse)
         self.analyse_window = Analyse(self)
+        self.analyse_window.off()
+        self.threadpool = QtCore.QThreadPool()
 
         self.pathinput = Path_Line_Edit(self)
 
@@ -322,31 +336,38 @@ class Player(QMainWindow):
             self.isPaused = False
 
     def start_analyse(self):
+
+        try:
+            file = self.fileslist.currentItem().text()
+        except AttributeError:
+            QMessageBox.information(self, "Warning!", "You should to select a file.")
+            return
+
         self.setEnabled(False)
-        self.analyse_window.start_analyse()
+        self.analyse_window.on()
+
+        worker = AnalyseWorker(file, self)
+        self.threadpool.start(worker)
+
+    def stop_analyse(self):
+        self.analyse_window.off()
+        self.setEnabled(True)
+
 
     def Stop(self):
         """
         Stop player
         """
         self.mediaplayer.stop()
+        self.timevalue.setTime(QtCore.QTime.fromMSecsSinceStartOfDay(self.mediaplayer.get_position()*self.duration))
         self.playbutton.setText("Play")
 
     def selectfile(self, item):
         self.OpenFile(filename = self.path+'/'+item.text())
 
-    def OpenFile(self, filename=''):
-        """
-        Open a media file in a MediaPlayer
-        """
-        if filename == '':
-            filename = QFileDialog.getOpenFileName(self, "Open File", './')[0]
-        if not filename:
-            return
-
-        #check if file in database
+    def check_warnings_time(self, filename):
         with self.db:
-            file_id = db_api.select_file(self.db, os.path.split(filename)[1])
+            file_id = db_api.select_file(self.db, filename)
             if file_id:
 
                 #if file in db, then add warning times in list bellow
@@ -360,6 +381,17 @@ class Player(QMainWindow):
                 self.warningslist.clear()
                 self.warningslist.addItem("There is nothing to show.")
 
+    def OpenFile(self, filename=''):
+        """
+        Open a media file in a MediaPlayer
+        """
+        if filename == '':
+            filename = QFileDialog.getOpenFileName(self, "Open File", './')[0]
+        if not filename:
+            return
+
+        self.check_warnings_time(os.path.split(filename)[1])
+
         # create the media
         self.media = self.instance.media_new(filename)
 
@@ -369,11 +401,14 @@ class Player(QMainWindow):
         # parse the metadata of the file
         self.media.parse_async()
 
+        fullpath = re.escape(filename)
+
         # get video duration
-        # out = os.popen("ffmpeg -i ./avi.avi 2>&1 | grep Duration | awk '{print $2}' | tr -d ,").read()
+        time = os.popen("ffmpeg -i {0}".format(fullpath) + " 2>&1 | grep Duration | awk '{print $2}' | tr -d ,").read().split(':')
+        self.duration = int(3600000*int(time[0])+60000*int(time[1])+1000*float(time[2]))
 
         # set the title of the track as window title
-        self.setWindowTitle(self.media.get_meta(0))
+        self.setWindowTitle("CCTV: " + self.media.get_meta(0))
 
         # the media player has to be 'connected' to the QFrame
         # (otherwise a video would be displayed in it's own window)
@@ -404,6 +439,7 @@ class Player(QMainWindow):
         # uses integer variables, so you need a factor; the higher the
         # factor, the more precise are the results
         # (1000 should be enough)
+        self.timevalue.setTime(QtCore.QTime.fromMSecsSinceStartOfDay(self.mediaplayer.get_position()*self.duration))
 
     def setTime(self, time):
         """
@@ -415,13 +451,12 @@ class Player(QMainWindow):
         if foldername == '':
             foldername = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
             self.pathinput.setText(foldername)
-            self.path = re.escape(foldername)
+            self.path = foldername
         if not foldername:
             return
 
         files = os.listdir(foldername)
-        self.path = re.escape(foldername)
-        print(self.path)
+        self.path = foldername
         self.fileslist.clear()
         for file in files:
             self.fileslist.addItem(file)
@@ -432,6 +467,8 @@ class Player(QMainWindow):
         """
         # setting the slider to the desired position
         self.positionslider.setValue(self.mediaplayer.get_position() * 1000)
+        self.timevalue.setTime(QtCore.QTime.fromMSecsSinceStartOfDay(self.mediaplayer.get_position()*self.duration))
+        self.volumeslider.setValue(self.mediaplayer.audio_get_volume())
 
         if not self.mediaplayer.is_playing():
             # no need to call this function if nothing is played
