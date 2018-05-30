@@ -1,6 +1,60 @@
 QMainWindow {
-    background: #060606;
-    color: #ddd;
+    background: #F2F2F2;
+    color: #080808;
+}
+
+#leftside_bg {
+    background-color: #080808;
+}
+
+#play[onplay=true] {
+    background-color: transparent;
+    border-image: url("icons/play.svg");
+    height: 32px;
+    width: 32px;
+    background: none;
+    border: none;
+    border-style: solid;
+    background-repeat: none;
+}
+
+#play[onplay=false] {
+    background-color: transparent;
+    border-image: url("icons/pause.svg");
+    height: 32px;
+    width: 32px;
+    background: none;
+    border: none;
+    border-style: solid;
+    background-repeat: none;
+}
+
+#stop {
+    background-color: transparent;
+    border-image: url("icons/stop.svg");
+    height: 32px;
+    width: 32px;
+    background: none;
+    border: none;
+    background-repeat: none;
+}
+
+#folder {
+    background-color: transparent;
+    border-image: url("icons/folder.png");
+    height: 32px;
+    width: 32px;
+    background: none;
+    border: none;
+    background-repeat: none;
+}
+
+#analyse {
+    background-color: #ff003e;
+    color: f2f2f2;
+    border: 0px solid none;
+    height: 28px;
+    margin: 60px;
 }
 
 QMenuBar {
@@ -22,49 +76,24 @@ QMenuBar::item:selected { /* when selected using mouse or keyboard */
 QMenuBar::item:pressed {
     background: #888888;
 }
-QPushButton {
-    background-color: #ddd;
-    border: none;
-    min-width: 68px;
-    min-height: 28px;
-}
 
 QSlider::groove:horizontal {
-    border: 0px solid transparent;
-    height: 2px;
-    background: #111111;
-    margin: 2px 0;
-}
-
-QSlider::sub-page:horizontal {
-    background: #bbb;
+    background-color: #080808;
+    height: 3px;
+    position: absolute;
+    left: 4px; right: 4px;
 }
 
 QSlider::handle:horizontal {
-    background-color: rgb(255, 255, 255);
-    height: 10px;
-    width: 12px;
-    border: 0px solid transparent;
-    margin: -2px 0;
-    border-radius: 1px;
+    background: #ff003e;
+    border: 1px solid #ff003e;
+    width: 5px;
+    margin: -2px 0; /* handle is placed by default on the contents rect of the groove. Expand outside the groove */
+    border-radius: 3px;
 }
 
-QSlider::handle:horizontal:pressed {
-    background-color: rgb(255, 255, 255);
-    height: 10px;
-    width: 18px;
-    border: 0px solid transparent;
-    margin: -5px 0px;
-    border-radius: 1px;
-}
-
-QSlider::handle:horizontal:disabled {
-    background-color: #bbbbbb;
-    height: 2px;
-    width: 8px;
-    border: 1px solid transparent;
-    margin: -1px -1px;
-    border-radius: 10px;
+QSlider::sub-page:horizontal {
+    background: #FF003E;
 }
 
 QLineEdit {
@@ -74,32 +103,47 @@ QLineEdit {
 }
 
 QDateTimeEdit {
-    color: #bbb;
-    background: #000000;
-    border: 1px solid #bbb;
+    color: #080808;
+    background-color: transparent;
+    border: 0px solid transparent;
+    margin: 2px 0;
 }
 
 QListWidget {
-    color: #bbb;
-    background: #000000;
-    border: 1px solid #bbb;
+    color: #f2f2f2;
+    background-color: transparent;
+    border: 0px solid transparent;
 }
 
 QListWidget::item {
-    background-color: #111;
+    background-color: #0c0c0c;
+    padding-left: 10px;
+    padding-top: 4px;
+    padding-bottom: 2px;
     spacing: 9px;
-    border: 0px;
-    border-style: solid;
-    border-width: 1px;
-    border-color: white;
+    border-bottom: 1px solid #010101;
 }
 
 QListWidget::item:selected {
-    background-color: #bbb;
+    background-color: #f2f2f2;
+    color: #0c0c0c;
+    border: 0px solid transparent;
 }
 
-QLabel{
-    color: #ddd;
+#lbl {
+    color: #f2f2f2;
+    font-size: 14px;
+    min-height: 32px;
+    background-color: #ff003e;
+}
+
+#path {
+  color: #f2f2f2;
+  font-size: 14px;
+  min-height: 16px;
+  background-color: #0c0c0c;
+  border: none;
+  border-bottom: 1px solid #ff003e;
 }
 
 QMessageBox{

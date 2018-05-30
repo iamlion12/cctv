@@ -2,19 +2,20 @@ import os
 import re
 import sys
 import vlc
-import mask_rcnn
-import numpy as np
-from db import db_api
-import tensorflow as tf
-from keras.models import load_model
-from keras.preprocessing import image
 
+import numpy as np
+# from keras.models import load_model
+# from keras.preprocessing import image
+# import tensorflow as tf
 from PyQt5 import QtGui, QtCore
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QWidget, QFrame,
-                             QHBoxLayout, QPushButton, QSlider, QVBoxLayout,
+                             QVBoxLayout, QPushButton, QSlider, QHBoxLayout,
                              QAction, QFileDialog, QDateTimeEdit, QLineEdit,
                              QListWidget, QGraphicsDropShadowEffect, QLabel,
                              QMessageBox, QDesktopWidget)
+
+from db import db_api
+# import mask_rcnn
 
 class Path_Line_Edit(QLineEdit):
     def __init__(self, master=None):
@@ -23,7 +24,7 @@ class Path_Line_Edit(QLineEdit):
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Enter:
-            self.master.selectfolder(self.text())
+            self.master.select_folder(self.text())
         else:
             super(Path_Line_Edit, self).keyPressEvent(event)
 
@@ -31,7 +32,6 @@ class AnalyseWorker(QtCore.QRunnable):
     """
     init
     """
-
     def __init__(self, file, master):
         super(AnalyseWorker, self).__init__()
         self.master = master
@@ -121,7 +121,7 @@ class AnalyseWorker(QtCore.QRunnable):
                 results = list([model.predict(np.array([image.img_to_array(image.array_to_img(people).resize((128,128)))])) for people in peoples])
             labels[int(framefile[:-4])] = list([np.argmax(out) for out in results])
 
-        print("Stopping analyse")
+        print("stopping analyse")
 
         del model
         del rcnn_model
@@ -160,9 +160,9 @@ class Analyse(QMainWindow):
         self.widget = QWidget(self)
         self.setCentralWidget(self.widget)
 
-        layout = QVBoxLayout()
-        layout.addWidget(self.statuslabel)
-        self.widget.setLayout(layout)
+        _lyt = QHBoxLayout()
+        _lyt.addWidget(self.statuslabel)
+        self.widget.setLayout(_lyt)
         self.centerOnScreen()
 
     def on(self):
@@ -203,18 +203,26 @@ class Player(QMainWindow):
 
         self.path = ''
 
-        self.createUI()
+        self.initUI()
         self.isPaused = False
         self.setStyleSheet(open("style.qss", "r").read())
 
-    def createUI(self):
+    def initUI(self):
         """
         Set up the user interface, signals & slots
+        For better understaning, I made some shortcuts for variables,
+        which is the instance of the QtWidgets classes.
+        List of shortcuts(made):
+        *btn - QPushButton;
+        *lbl - QLabel;
+        *slr - QSlider;
+        *lyt - Q_lyt;
+        *ctrl - ctrl;
         """
         self.widget = QWidget(self)
         self.setCentralWidget(self.widget)
 
-        # Video widget
+        #video widget
         self.videoframe = QFrame()
         self.palette = self.videoframe.palette()
         self.palette.setColor (QtGui.QPalette.Window,
@@ -224,91 +232,107 @@ class Player(QMainWindow):
 
         #time value
         self.timevalue = QDateTimeEdit()
-        self.timevalue.setDisplayFormat('hh:mm:ss.z')
-        # self.timevalue.dateTimeChanged.connect(lambda x: self.setTime(self.timevalue.time().msecsSinceStartOfDay()))
+        self.timevalue.setDisplayFormat('hh:mm:ss')
+        self.timevalue.setFixedSize(70, 30)
 
         #position slider
-        self.positionslider = QSlider(QtCore.Qt.Horizontal, self)
-        self.positionslider.setToolTip("Position")
-        self.positionslider.setMaximum(1000)
-        self.positionslider.sliderMoved.connect(self.setPosition)
+        self.position_slr = QSlider(QtCore.Qt.Horizontal, self)
+        self.position_slr.setToolTip("Position")
+        self.position_slr.setMaximum(1000)
+        self.position_slr.sliderMoved.connect(self.set_position)
 
         #play button
-        self.hbuttonbox = QHBoxLayout()
-        self.playbutton = QPushButton("Play")
-        self.hbuttonbox.addWidget(self.playbutton)
-        self.playbutton.clicked.connect(self.PlayPause)
+
+        self.play_btn = QPushButton()
+        self.play_btn.setProperty("onplay", True)
+        self.play_btn.setObjectName("play")
+        self.play_btn.clicked.connect(self.play_pause)
 
         #stop button
-        self.stopbutton = QPushButton("Stop")
-        self.hbuttonbox.addWidget(self.stopbutton)
-        self.stopbutton.clicked.connect(self.Stop)
+        self.stop_btn = QPushButton()
+        self.stop_btn.setObjectName('stop')
+        self.stop_btn.clicked.connect(self.stop)
 
         #analyse button
-        self.analysebutton = QPushButton('Analyse')
-        self.analysebutton.clicked.connect(self.start_analyse)
+        self.analyse_btn = QPushButton('Analyse')
+        self.analyse_btn.setObjectName('analyse')
+        self.analyse_btn.clicked.connect(self.start_analyse)
         self.analyse_window = Analyse(self)
         self.analyse_window.off()
         self.threadpool = QtCore.QThreadPool()
 
-        self.pathinput = Path_Line_Edit(self)
+        self.path_input = Path_Line_Edit(self)
+        self.path_input.setObjectName('path')
 
-        self.folderbutton = QPushButton('Select folder')
-        self.folderbutton.clicked.connect(lambda x: self.selectfolder(foldername=''))
+        self.folder_btn = QPushButton()
+        self.folder_btn.setObjectName('folder')
+        self.folder_btn.clicked.connect(lambda x: self.select_folder(foldername=''))
 
-        self.fileslist_label = QLabel("Playlist:")
+        self.fileslist_lbl = QLabel('Playlist:')
+        self.fileslist_lbl.setObjectName('lbl')
+        self.fileslist_lbl.setIndent(12)
 
         self.fileslist = QListWidget()
-        self.fileslist.itemClicked.connect(self.selectfile)
+        self.fileslist.itemClicked.connect(self.select_file)
 
-        self.warnings_label = QLabel("Warnings time:")
+        self.warnings_lbl = QLabel('Warnings time:')
+        self.warnings_lbl.setObjectName('lbl')
+        self.warnings_lbl.setIndent(12)
 
         self.warningslist = QListWidget()
-        # self.fileslist.itemClicked.connect(self.selectfile)
-
-        self.leftvboxlayout = QVBoxLayout()
-        self.leftvboxlayout.addWidget(self.fileslist_label)
-        self.leftvboxlayout.addWidget(self.fileslist)
-        self.leftvboxlayout.addStretch(1)
-        self.leftvboxlayout.addWidget(self.warnings_label)
-        self.leftvboxlayout.addWidget(self.warningslist)
-        self.leftvboxlayout.addStretch(1)
-        self.leftvboxlayout.addWidget(self.analysebutton)
-        self.leftvboxlayout.addWidget(self.pathinput)
-        self.leftvboxlayout.addWidget(self.folderbutton)
 
         #volume slider
-        self.hbuttonbox.addStretch(1)
-        self.volumeslider = QSlider(QtCore.Qt.Horizontal, self)
-        self.volumeslider.setMaximum(100)
-        self.volumeslider.setValue(self.mediaplayer.audio_get_volume())
-        self.volumeslider.setToolTip("Volume")
-        self.hbuttonbox.addWidget(self.volumeslider)
-        self.volumeslider.valueChanged.connect(self.setVolume)
+        self.volume_slr = QSlider(QtCore.Qt.Horizontal, self)
+        self.volume_slr.setMaximum(100)
+        self.volume_slr.setValue(self.mediaplayer.audio_get_volume())
+        self.volume_slr.setToolTip("Volume")
+        self.volume_slr.valueChanged.connect(self.set_volume)
 
         #setting up layouts
-        self.vboxlayout = QVBoxLayout()
-        self.vboxlayout.addWidget(self.videoframe)
-        self.vboxlayout.addWidget(self.timevalue)
-        self.vboxlayout.addWidget(self.positionslider)
-        self.vboxlayout.addLayout(self.hbuttonbox)
+        folder_lyt = QHBoxLayout()
+        folder_lyt.addWidget(self.path_input)
+        folder_lyt.addWidget(self.folder_btn)
 
-        self.mainlayout = QHBoxLayout()
-        self.mainlayout.addLayout(self.leftvboxlayout)
-        self.mainlayout.addLayout(self.vboxlayout, 60)
+        leftside_lyt = QVBoxLayout()
+        leftside_lyt.setContentsMargins(0,10,0,0)
+        leftside_lyt.addSpacing(6)
+        leftside_lyt.addWidget(self.fileslist_lbl)
+        leftside_lyt.addWidget(self.fileslist)
+        leftside_lyt.addWidget(self.analyse_btn)
+        leftside_lyt.addWidget(self.warnings_lbl)
+        leftside_lyt.addWidget(self.warningslist)
+        leftside_lyt.addLayout(folder_lyt)
+        leftside_lyt.addSpacing(6)
 
-        self.widget.setLayout(self.mainlayout)
+        self.leftside_bg = QWidget()
+        self.leftside_bg.setObjectName("leftside_bg")
+        self.leftside_bg.setLayout(leftside_lyt)
 
-        open = QAction(QtGui.QIcon('open.png'), "&Open", self)
-        open.setShortcut('Ctrl+O')
-        open.setStatusTip('Open File')
-        open.triggered.connect(lambda x: self.OpenFile(filename=''))
-        exit = QAction("&Exit", self)
-        exit.triggered.connect(sys.exit)
-        menubar = self.menuBar()
-        filemenu = menubar.addMenu("&File")
-        filemenu.addAction(open)
-        filemenu.addAction(exit)
+        ctrl_lyt = QHBoxLayout()
+        ctrl_lyt.addSpacing(20)
+        ctrl_lyt.addWidget(self.play_btn)
+        ctrl_lyt.setSpacing(0)
+        ctrl_lyt.addWidget(self.stop_btn)
+        ctrl_lyt.addStretch(1)
+        ctrl_lyt.addWidget(self.volume_slr)
+
+        ctrl_panel_lyt = QVBoxLayout()
+        ctrl_panel_lyt.setContentsMargins(60,12,60,12)
+        ctrl_panel_lyt.addWidget(self.timevalue, 0, QtCore.Qt.AlignLeft)
+        ctrl_panel_lyt.addWidget(self.position_slr)
+        ctrl_panel_lyt.addLayout(ctrl_lyt)
+
+        rightside_lyt = QVBoxLayout()
+        rightside_lyt.addWidget(self.videoframe)
+        rightside_lyt.addLayout(ctrl_panel_lyt)
+
+        main_lyt = QHBoxLayout()
+        main_lyt.setSpacing(0)
+        main_lyt.setContentsMargins(0,0,0,0)
+        main_lyt.addWidget(self.leftside_bg)
+        main_lyt.addLayout(rightside_lyt, 60)
+
+        self.widget.setLayout(main_lyt)
 
         self.timer = QtCore.QTimer(self)
         self.timer.setInterval(200)
@@ -317,21 +341,23 @@ class Player(QMainWindow):
         #creates connection to db
         self.db = db_api.create_connection(os.path.join(os.getcwd(), 'db','data.db'))
 
-    def PlayPause(self):
+    def play_pause(self):
         """
         Toggle play/pause status
         """
         if self.mediaplayer.is_playing():
             self.mediaplayer.pause()
-            self.playbutton.setText("Play")
+            self.play_btn.setProperty("onplay", True)
+            self.play_btn.setStyle(self.play_btn.style())
             self.isPaused = True
 
         else:
             if self.mediaplayer.play() == -1:
-                self.OpenFile()
                 return
             self.mediaplayer.play()
-            self.playbutton.setText("Pause")
+            self.play_btn.setProperty("onplay", False)
+            self.play_btn.setStyle(self.play_btn.style())
+
             self.timer.start()
             self.isPaused = False
 
@@ -354,16 +380,18 @@ class Player(QMainWindow):
         self.setEnabled(True)
 
 
-    def Stop(self):
+    def stop(self):
         """
-        Stop player
+        stop player
         """
-        self.mediaplayer.stop()
-        self.timevalue.setTime(QtCore.QTime.fromMSecsSinceStartOfDay(self.mediaplayer.get_position()*self.duration))
-        self.playbutton.setText("Play")
+        if self.mediaplayer.is_playing():
+            self.timevalue.setTime(QtCore.QTime.fromMSecsSinceStartOfDay(0))
 
-    def selectfile(self, item):
-        self.OpenFile(filename = self.path+'/'+item.text())
+        self.mediaplayer.stop()
+
+
+    def select_file(self, item):
+        self.open_file(filename = self.path+'/'+item.text())
 
     def check_warnings_time(self, filename):
         with self.db:
@@ -381,7 +409,7 @@ class Player(QMainWindow):
                 self.warningslist.clear()
                 self.warningslist.addItem("There is nothing to show.")
 
-    def OpenFile(self, filename=''):
+    def open_file(self, filename=''):
         """
         Open a media file in a MediaPlayer
         """
@@ -421,15 +449,15 @@ class Player(QMainWindow):
             self.mediaplayer.set_hwnd(self.videoframe.winId())
         elif sys.platform == "darwin": # for MacOS
             self.mediaplayer.set_agl(self.videoframe.windId())
-        self.PlayPause()
+        self.play_pause()
 
-    def setVolume(self, Volume):
+    def set_volume(self, Volume):
         """
         Set the volume
         """
         self.mediaplayer.audio_set_volume(Volume)
 
-    def setPosition(self, position):
+    def set_position(self, position):
         """
         Set the position
         """
@@ -441,16 +469,16 @@ class Player(QMainWindow):
         # (1000 should be enough)
         self.timevalue.setTime(QtCore.QTime.fromMSecsSinceStartOfDay(self.mediaplayer.get_position()*self.duration))
 
-    def setTime(self, time):
+    def set_time(self, time):
         """
         Set time to display
         """
         self.mediaplayer.set_time(time)
 
-    def selectfolder(self, foldername=''):
+    def select_folder(self, foldername=''):
         if foldername == '':
             foldername = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
-            self.pathinput.setText(foldername)
+            self.path_input.setText(foldername)
             self.path = foldername
         if not foldername:
             return
@@ -466,9 +494,9 @@ class Player(QMainWindow):
         updates the user interface
         """
         # setting the slider to the desired position
-        self.positionslider.setValue(self.mediaplayer.get_position() * 1000)
+        self.position_slr.setValue(self.mediaplayer.get_position() * 1000)
         self.timevalue.setTime(QtCore.QTime.fromMSecsSinceStartOfDay(self.mediaplayer.get_position()*self.duration))
-        self.volumeslider.setValue(self.mediaplayer.audio_get_volume())
+        self.volume_slr.setValue(self.mediaplayer.audio_get_volume())
 
         if not self.mediaplayer.is_playing():
             # no need to call this function if nothing is played
@@ -477,7 +505,7 @@ class Player(QMainWindow):
                 # after the video finished, the play button stills shows
                 # "Pause", not the desired behavior of a media player
                 # this will fix it
-                self.Stop()
+                self.stop()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
