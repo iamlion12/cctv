@@ -138,13 +138,39 @@ QListWidget::item:selected {
 }
 
 #path {
-  color: #f2f2f2;
-  font-size: 14px;
-  min-height: 16px;
-  background-color: #0c0c0c;
-  border: none;
-  border-bottom: 1px solid #ff003e;
+    color: #f2f2f2;
+    font-size: 14px;
+    min-height: 16px;
+    background-color: #0c0c0c;
+    border: none;
+    border-bottom: 1px solid #ff003e;
 }
+
+/*Analyse window*/
+
+#analyse_wd {
+    background-color: #f2f2f2;
+}
+
+#status_lbl {
+    color: #0c0c0c;
+}
+
+#progress_bar {
+    color: #0c0c0c;
+    background-color: #f2f2f2;
+    border: 1px solid #ff003e;
+    border-radius: 6px;
+    border-width: 2px;
+    text-align: center;
+}
+
+#progress_bar::chunk {
+    background-color: #ff003e;
+    border: 2px solid #f2f2f2;
+    border-radius: 2px;
+}
+
 
 QMessageBox{
     background-color: #060606
@@ -152,6 +178,6 @@ QMessageBox{
 
 * {
   font-family: Comfortaa;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: Normal;
 }

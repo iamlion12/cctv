@@ -63,13 +63,19 @@ def select_people(model, image):
         bbox = utils.extract_bboxes(r['masks'])
 
         peoples = []
+        boxes = []
 
         for i in indexes:
             if r['scores'][i.item()] >= 0.9:
-                cropped_image = image[bbox[i.item()][0]:bbox[i.item()][2], bbox[i.item()][1]:bbox[i.item()][3]]
+
+                top, left, bottom, right = bbox[i.item()]
+
+                cropped_image = image[top:bottom, left:right]
                 peoples.append(cropped_image)
 
-        return peoples
+                boxes.append([top, bottom, left, right])
+
+        return peoples, boxes
 
 
 if __name__ == "__main__":

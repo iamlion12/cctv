@@ -1,5 +1,7 @@
 import os
 import sqlite3
+import imageio
+import numpy as np
 
 create_files_table = """
                         CREATE TABLE IF NOT EXISTS files(
@@ -15,6 +17,14 @@ create_warning_time_table = """
                                 file_id integer NOT NULL,
                                 FOREIGN KEY (file_id) REFERENCES files (id));
                             """
+
+create_warning_images_table = """
+                                 CREATE TABLE IF NOT EXISTS warning_images(
+                                 id integer PRIMARY KEY,
+                                 time integer NOT NULL,
+                                 image text NOT NULL,
+                                 FOREIGN KEY (time) REFERENCES warning_time (id));
+                              """
 
 def create_connection(db_file):
     try:
@@ -52,6 +62,21 @@ def add_time(con, values):
 
     return c.lastrowid
 
+def add_image(con, values):
+
+    sql = "INSERT INTO warning_images(time, image) VALUES(?, ?);"
+    c = con.cursor()
+    c.execute(sql, values)
+
+    return c.lastrowid
+
+def delete_images(con):
+    sql = """DELETE FROM warning_images WHERE id>=0"""
+    c = con.cursor()
+    c.execute(sql)
+
+    return c.lastrowid
+
 def select_file(con, name):
     c = con.cursor()
     c.execute("SELECT id FROM files where name = ?", (name,))
@@ -69,6 +94,14 @@ def select_time(con, id):
 
     return rows
 
+def select_images(con, time):
+    c = con.cursor()
+    c.execute("SELECT image FROM warning_images WHERE time = ?", (time,))
+
+    rows = c.fetchall()
+
+    return rows
+
 def main():
 
     con = create_connection(os.path.join(os.getcwd(), 'data.db'))
@@ -76,6 +109,7 @@ def main():
     if con is not None:
         create_table(con, create_files_table)
         create_table(con, create_warning_time_table)
+        create_table(con, create_warning_images_table)
     else:
         print("Cannot connect to database.")
 
@@ -83,15 +117,10 @@ def main():
 
     try:
         with con:
-            file_id = add_file(con, 'test.mp4',)
-            # add_time(con, ('0:0:16', '0:0:145', 1,))
-            # print(file_id, 1)
-
-            # id = select_file(con, 'test.mp4')
-            print(select_file(con, 'test.mp4')[0][0])
+            pass
 
     except Exception as e:
-        print(e)
+        print("Error", e)
 
 if __name__ == "__main__":
     main()

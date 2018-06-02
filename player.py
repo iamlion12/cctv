@@ -2,31 +2,52 @@ import os
 import re
 import sys
 import vlc
+import time
 
 import numpy as np
-# from keras.models import load_model
-# from keras.preprocessing import image
-# import tensorflow as tf
 from PyQt5 import QtGui, QtCore
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QWidget, QFrame,
                              QVBoxLayout, QPushButton, QSlider, QHBoxLayout,
                              QAction, QFileDialog, QDateTimeEdit, QLineEdit,
                              QListWidget, QGraphicsDropShadowEffect, QLabel,
-                             QMessageBox, QDesktopWidget)
+                             QMessageBox, QDesktopWidget, QProgressBar)
 
 from db import db_api
-# import mask_rcnn
 
-class Path_Line_Edit(QLineEdit):
+class pathLineEdit(QLineEdit):
     def __init__(self, master=None):
-        super(Path_Line_Edit, self).__init__(master)
+        super(pathLineEdit, self).__init__(master)
         self.master = master
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Enter:
             self.master.select_folder(self.text())
         else:
-            super(Path_Line_Edit, self).keyPressEvent(event)
+            super(pathLineEdit, self).keyPressEvent(event)
+
+class loadModules(QtCore.QRunnable):
+
+    def __init__(self, master):
+        super(loadModules, self).__init__()
+        self.master = master
+
+    @QtCore.pyqtSlot()
+    def run(self):
+
+        global load_model
+        from keras.models import load_model
+
+        global image
+        from keras.preprocessing import image
+
+        global tf
+        import tensorflow as tf
+
+        global mask_rcnn
+        import mask_rcnn
+
+        self.master.analyse_btn.setEnabled(True)
+
 
 class AnalyseWorker(QtCore.QRunnable):
     """
@@ -35,10 +56,27 @@ class AnalyseWorker(QtCore.QRunnable):
     def __init__(self, file, master):
         super(AnalyseWorker, self).__init__()
         self.master = master
+        self.master.on_analyse = True
         self.file = file
 
     @QtCore.pyqtSlot()
     def run(self):
+
+        self.master.analyse_window.progress_bar.setValue(0)
+
+        def draw_box(img, boxes, labels, color=[[0, 255, 0], [255, 0, 0]]):
+            """Draw 3-pixel width bounding boxes on the given image array.
+            color: list of 3 int values for RGB.
+            """
+            for label, box in zip(labels, boxes):
+
+                y1, y2, x1, x2 = box
+                img[y1:y1 + 2, x1:x2] = color[label]
+                img[y2:y2 + 2, x1:x2] = color[label]
+                img[y1:y2, x1:x1 + 2] = color[label]
+                img[y1:y2, x2:x2 + 2] = color[label]
+
+            return img
 
         def replace(l, step = 5):
 
@@ -62,11 +100,9 @@ class AnalyseWorker(QtCore.QRunnable):
             while True:
                 try:
                     start = end + l[end:].index(1)
-                    print("start ", start)
                     try:
                         end = start + l[start:].index(0)
                         time.append((start, end))
-                        print("end ", end)
 
                     except ValueError:
                         time.append((start, len(l)))
@@ -76,52 +112,80 @@ class AnalyseWorker(QtCore.QRunnable):
 
             return time
 
-        print("Starting...")
+        os.system('rm frames/*.jpg')
 
-        print("Getting access to database...")
+        self.master.analyse_window.status_lbl.setText("Starting...")
+
+        self.master.analyse_window.status_lbl.setText("Getting access to database...")
 
         db = db_api.create_connection(os.path.join(os.getcwd(), 'db','data.db'))
 
         file_id = db_api.select_file(db, self.file)
         if file_id:
-            print("File already in db, skiping...")
+            self.master.analyse_window.status_lbl.setText("File already in db, skiping...")
         else:
-            print("Adding filename in database...")
+            self.master.analyse_window.status_lbl.setText("Adding filename in database...")
             with db:
                 file_id = db_api.add_file(db, self.file)
 
-        print("Extracting frames from video...")
+        self.master.analyse_window.status_lbl.setText("Extracting frames from video...")
         path_to_file = os.path.join(self.master.path, self.file)
         print(path_to_file)
         command  = r"ffmpeg -i {0} -vf fps=1 ./frames/%d.jpg".format(re.escape(path_to_file))
         os.system(command)
 
         frames = os.listdir('./frames/')
-        print("Starting analyse {0} frames".format(len(frames)))
 
         rcnn_model = mask_rcnn.load_mask_rcnn()
-        print("Successfully loaded 1st model...")
+        self.master.analyse_window.status_lbl.setText("Successfully loaded 1st model...")
 
         model = load_model("./model.h5")
         model._make_predict_function()
         graph = tf.get_default_graph()
 
-        print("Successfully loaded 2nd model... Starting analyse")
+        self.master.analyse_window.status_lbl.setText("Successfully loaded 2nd model...")
 
-        print("Startin analyse...")
+        self.master.analyse_window.status_lbl.setText("Starting analyse {0} frames".format(len(frames)))
+
+        file = os.path.splitext(self.file)[0]
+        warning_folder = os.path.join('./warnings', file)
+        if not os.path.isdir(warning_folder): os.mkdir(warning_folder)
 
         labels = {}
 
+        start = time.time()
+
+        progress = 0
+        progress_delta = 100/len(frames)
+
         for framefile in frames:
 
-            print("Frame #{0}, {1} files until finish.".format(framefile[:-4], len(frames)-len(labels.keys())))
+            files_until_finish = len(frames)-len(labels.keys())
 
-            peoples = mask_rcnn.select_people(rcnn_model, image.img_to_array(image.load_img("./frames/"+framefile)))
+            self.master.analyse_window.status_lbl.setText("Frame #{0}, {1} files until finish.".format(framefile[:-4], files_until_finish))
+
+            img = image.img_to_array(image.load_img("./frames/"+framefile))
+
+            peoples, boxes = mask_rcnn.select_people(rcnn_model, img)
+
             with graph.as_default():
-                results = list([model.predict(np.array([image.img_to_array(image.array_to_img(people).resize((128,128)))])) for people in peoples])
+
+                results = list([model.predict(np.expand_dims(
+                    image.img_to_array(image.array_to_img(people).resize((128,128))), axis=0)) for people in peoples])
+
             labels[int(framefile[:-4])] = list([np.argmax(out) for out in results])
 
-        print("stopping analyse")
+            img = draw_box(img, boxes, labels[int(framefile[:-4])])
+            image.array_to_img(img).save(os.path.join(warning_folder, framefile))
+
+            progress += progress_delta
+
+            self.master.analyse_window.progress_bar.setValue(progress)
+
+        end = time.time()
+
+        self.master.analyse_window.status_lbl.setText('Done. Elapsed time: {0:.2f}s'.format(end - start))
+        print('Done. Elapsed time: {0:.2f}s'.format(end - start))
 
         del model
         del rcnn_model
@@ -135,10 +199,13 @@ class AnalyseWorker(QtCore.QRunnable):
         times = find_time(warning_points)
 
         with db:
-            for time in times:
-                db_api.add_time(db, (str(datetime.timedelta(seconds=time[0])), str(datetime.timedelta(seconds=time[1])), file_id,))
-
-        os.system('rm frames/*.jpg')
+            time_in_db = db_api.select_time(db, file_id)
+            if not time_in_db:
+                for _time in times:
+                    db_api.add_time(db,
+                                    (str(datetime.timedelta(seconds=_time[0])),
+                                     str(datetime.timedelta(seconds=_time[1])),
+                                     file_id,))
 
         self.master.stop_analyse()
 
@@ -155,24 +222,34 @@ class Analyse(QMainWindow):
 
         self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
 
-        self.statuslabel = QLabel("Please wait...")
+        self.setFixedSize(512, 128)
+
+        self.status_lbl = QLabel("Please wait...")
+        self.status_lbl.setObjectName('status_lbl')
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setObjectName('progress_bar')
+        self.progress_bar.setValue(0)
 
         self.widget = QWidget(self)
+        self.widget.setObjectName('analyse_wd')
         self.setCentralWidget(self.widget)
 
-        _lyt = QHBoxLayout()
-        _lyt.addWidget(self.statuslabel)
-        self.widget.setLayout(_lyt)
-        self.centerOnScreen()
+        lyt = QVBoxLayout()
+        lyt.addWidget(self.status_lbl)
+        lyt.addWidget(self.progress_bar)
+        self.widget.setLayout(lyt)
 
     def on(self):
 
         self.activateWindow()
         self.show()
+        self.centerOnScreen()
 
     def off(self):
 
         self.close()
+        self.master.analyse_btn.setEnabled(True)
 
     def centerOnScreen(self):
         '''
@@ -185,7 +262,6 @@ class Analyse(QMainWindow):
     def closeEvent(self, event):
         self.master.setEnabled(True)
         event.accept()
-
 
 
 class Player(QMainWindow):
@@ -233,7 +309,7 @@ class Player(QMainWindow):
         #time value
         self.timevalue = QDateTimeEdit()
         self.timevalue.setDisplayFormat('hh:mm:ss')
-        self.timevalue.setFixedSize(70, 30)
+        self.timevalue.setFixedSize(80, 30)
 
         #position slider
         self.position_slr = QSlider(QtCore.Qt.Horizontal, self)
@@ -242,7 +318,6 @@ class Player(QMainWindow):
         self.position_slr.sliderMoved.connect(self.set_position)
 
         #play button
-
         self.play_btn = QPushButton()
         self.play_btn.setProperty("onplay", True)
         self.play_btn.setObjectName("play")
@@ -259,9 +334,15 @@ class Player(QMainWindow):
         self.analyse_btn.clicked.connect(self.start_analyse)
         self.analyse_window = Analyse(self)
         self.analyse_window.off()
-        self.threadpool = QtCore.QThreadPool()
+        self.analyse_btn.setEnabled(False)
+        self.on_analyse = False
 
-        self.path_input = Path_Line_Edit(self)
+        self.threadpool = QtCore.QThreadPool()
+        self.threadpool.setMaxThreadCount(1)
+        worker = loadModules(self)
+        self.threadpool.start(worker)
+
+        self.path_input = pathLineEdit(self)
         self.path_input.setObjectName('path')
 
         self.folder_btn = QPushButton()
@@ -363,22 +444,31 @@ class Player(QMainWindow):
 
     def start_analyse(self):
 
+        self.analyse_btn.setEnabled(False)
+
         try:
             file = self.fileslist.currentItem().text()
         except AttributeError:
+            self.analyse_btn.setEnabled(True)
             QMessageBox.information(self, "Warning!", "You should to select a file.")
             return
 
-        self.setEnabled(False)
-        self.analyse_window.on()
+        if not self.on_analyse:
+            self.setEnabled(False)
+            self.analyse_window.on()
 
-        worker = AnalyseWorker(file, self)
-        self.threadpool.start(worker)
+            try:
+                worker = AnalyseWorker(file, self)
+                self.threadpool.start(worker)
+            except Exception as e:
+                print(e)
+        else:
+            return
 
     def stop_analyse(self):
         self.analyse_window.off()
         self.setEnabled(True)
-
+        self.on_analyse = False
 
     def stop(self):
         """
