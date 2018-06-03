@@ -10,9 +10,14 @@ from PyQt5.QtWidgets import (QMainWindow, QApplication, QWidget, QFrame,
                              QVBoxLayout, QPushButton, QSlider, QHBoxLayout,
                              QAction, QFileDialog, QDateTimeEdit, QLineEdit,
                              QListWidget, QGraphicsDropShadowEffect, QLabel,
-                             QMessageBox, QDesktopWidget, QProgressBar)
+                             QMessageBox, QDesktopWidget, QProgressBar,
+                             QGraphicsView, QGraphicsScene)
+
+from PyQt5.QtCore import Qt, QRectF, pyqtSignal, QT_VERSION_STR
+from PyQt5.QtGui import QImage, QPixmap, QPainterPath
 
 from db import db_api
+from showpics import pictureViewer
 
 class pathLineEdit(QLineEdit):
     def __init__(self, master=None):
@@ -133,13 +138,16 @@ class AnalyseWorker(QtCore.QRunnable):
         print(path_to_file)
         command  = r"ffmpeg -i {0} -vf fps=1 ./frames/%d.jpg".format(re.escape(path_to_file))
         os.system(command)
+        self.master.analyse_window.status_lbl.setText("Loading models...")
 
         frames = os.listdir('./frames/')
 
         rcnn_model = mask_rcnn.load_mask_rcnn()
-        self.master.analyse_window.status_lbl.setText("Successfully loaded 1st model...")
+        self.master.analyse_window.status_lbl.setText("Successfully loaded 1st model, loading second model...")
 
-        model = load_model("./model.h5")
+        DEVICE = "/cpu:0"
+        with tf.device(DEVICE):
+            model = load_model("./model.h5")
         model._make_predict_function()
         graph = tf.get_default_graph()
 
@@ -309,6 +317,7 @@ class Player(QMainWindow):
         #time value
         self.timevalue = QDateTimeEdit()
         self.timevalue.setDisplayFormat('hh:mm:ss')
+        self.timevalue.setReadOnly(True)
         self.timevalue.setFixedSize(80, 30)
 
         #position slider
@@ -331,11 +340,21 @@ class Player(QMainWindow):
         #analyse button
         self.analyse_btn = QPushButton('Analyse')
         self.analyse_btn.setObjectName('analyse')
+        self.analyse_btn.setFixedSize(70, 28)
         self.analyse_btn.clicked.connect(self.start_analyse)
         self.analyse_window = Analyse(self)
         self.analyse_window.off()
         self.analyse_btn.setEnabled(False)
         self.on_analyse = False
+
+        self.details_btn = QPushButton('Details')
+        self.details_btn.setVisible(False)
+        self.details_btn.setObjectName('details')
+        self.details_btn.setFixedSize(70, 28)
+        self.details_btn.clicked.connect(self.show_details)
+
+        self.details_wd = pictureViewer()
+        self.details_wd.close()
 
         self.threadpool = QtCore.QThreadPool()
         self.threadpool.setMaxThreadCount(1)
@@ -379,7 +398,12 @@ class Player(QMainWindow):
         leftside_lyt.addSpacing(6)
         leftside_lyt.addWidget(self.fileslist_lbl)
         leftside_lyt.addWidget(self.fileslist)
-        leftside_lyt.addWidget(self.analyse_btn)
+
+        analyse_btns = QHBoxLayout()
+        analyse_btns.addWidget(self.details_btn)
+        analyse_btns.addWidget(self.analyse_btn)
+        leftside_lyt.addLayout(analyse_btns)
+
         leftside_lyt.addWidget(self.warnings_lbl)
         leftside_lyt.addWidget(self.warningslist)
         leftside_lyt.addLayout(folder_lyt)
@@ -465,6 +489,23 @@ class Player(QMainWindow):
         else:
             return
 
+    def show_details(self):
+
+        try:
+            file = self.fileslist.currentItem().text()
+        except AttributeError:
+            self.analyse_btn.setEnabled(True)
+            QMessageBox.information(self, "Warning!", "You should to select a file.")
+            return
+
+        item = self.fileslist.currentItem().text()
+        if os.path.isdir(os.path.join('warnings', os.path.splitext(item)[0])):
+            self.details_wd.show()
+            self.details_wd.start(self.fileslist.currentItem().text())
+        else:
+            return
+
+
     def stop_analyse(self):
         self.analyse_window.off()
         self.setEnabled(True)
@@ -495,7 +536,10 @@ class Player(QMainWindow):
                 for time in timelist:
                     self.warningslist.addItem(time[0]+"-"+time[1])
 
+                self.details_btn.setVisible(True)
+
             else:
+                self.details_btn.setVisible(False)
                 self.warningslist.clear()
                 self.warningslist.addItem("There is nothing to show.")
 

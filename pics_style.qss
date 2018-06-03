@@ -1,0 +1,20 @@
+#next {
+    background-color: transparent;
+    border-style: double;
+    border-image: url("icons/next.svg");
+    background: rgba(13,13,13,100);
+    border: 2px solid rgba(13,13,13,100);
+    background-repeat: none;
+}
+
+#previous {
+    background-color: transparent;
+    border-image: url("icons/previous.svg");
+    background: rgba(13,13,13,100);
+    border: 2px solid rgba(13,13,13,100);
+    background-repeat: none;
+}
+
+QGraphicsView {
+    background-color: #0c0c0c;
+}
